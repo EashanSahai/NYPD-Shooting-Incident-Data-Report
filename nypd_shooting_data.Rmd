@@ -1,0 +1,262 @@
+---
+title: "NYPD_Shooting_Data"
+output:
+  html_document: default
+  pdf_document: default
+date: "2023-12-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyr)
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+library(formattable) # This library will still show the data if knitted to PDF, but only works aesthetically on HTML.
+```
+# NYPD Shooting Incident Data Analysis
+
+## Introduction
+
+This document provides an analysis of the NYPD Shooting Incident Data. The dataset includes details on historic data of shooting incidents recorded by the New York City Police Department. This analysis is designed to describe the following data set in a reproducible manner.
+
+## Importing the Dataset
+
+I will import the dataset using the read.csv function in R Markdown
+```{r}
+setwd("/Users/eashan/Downloads")
+
+# Importing the Dataset
+shooting_data <- read.csv("NYPD_Shooting_Incident_Data__Historic_.csv", header = TRUE, stringsAsFactors = FALSE)
+
+#Displaying the first few rows of the dataset
+
+head(shooting_data)
+# Summary of the dataset
+summary(shooting_data)
+
+# Structure of the dataset
+str(shooting_data)
+```
+## Project Step 2: Data Cleaning
+
+### Converting Variables to Appropriate Types
+
+```{r}
+# Converting categorical variables to factors
+shooting_data$BORO <- as.factor(shooting_data$BORO)
+shooting_data$VIC_SEX <- as.factor(shooting_data$VIC_SEX)
+shooting_data$VIC_RACE <- as.factor(shooting_data$VIC_RACE)
+shooting_data$PERP_SEX <- as.factor(shooting_data$PERP_SEX)
+shooting_data$PERP_RACE <- as.factor(shooting_data$PERP_RACE)
+
+# Converting date and time variables to appropriate types
+shooting_data$OCCUR_DATE <- as.Date(shooting_data$OCCUR_DATE, format = "%m/%d/%Y")
+shooting_data$OCCUR_TIME <- as.POSIXct(shooting_data$OCCUR_TIME, format = "%H:%M:%S")
+```{r}
+# Dropping columns that are not needed
+shooting_data <- shooting_data[, !names(shooting_data) %in% c("LOC_OF_OCCUR_DESC", "JURISDICTION_CODE", "LOC_CLASSFCTN_DESC", "LOCATION_DESC")]
+```{r}
+# Dropping columns that are not needed
+shooting_data <- shooting_data[, !names(shooting_data) %in% c("LOC_OF_OCCUR_DESC", "JURISDICTION_CODE", "LOC_CLASSFCTN_DESC", "LOCATION_DESC")]
+```{r}
+# Checking for missing data
+sapply(shooting_data, function(x) sum(is.na(x)))
+```
+I will label everything unknown with the tag "Unknown" for my data
+```{r}
+# Replacing missing values (NA) in all columns with "Unknown"
+shooting_data[is.na(shooting_data)] <- "Unknown"
+
+# Specifically handling the gender column (VIC_SEX)
+# Replacing blanks and 'U' with "Unknown"
+shooting_data$VIC_SEX[shooting_data$VIC_SEX == "" | shooting_data$VIC_SEX == "U"] <- "Unknown"
+shooting_data$VIC_SEX[shooting_data$PERP_SEX == "" | shooting_data$VIC_SEX == "U"] <- "Unknown"
+shooting_data$VIC_RACE[shooting_data$VIC_SEX == ""] <- "Unknown"
+shooting_data$PERP_RACE[shooting_data$VIC_SEX == ""] <- "Unknown"
+
+```{r}
+# Displaying the summary of the cleaned data
+summary(shooting_data)
+```
+# Project Step 3: Add Visualizations and Analysis
+### I will now add some visual analysis to my project and give an apt description of my thought process that follows.
+
+## Visualization 1: Bar Plot of Shooting Incidents by Borough
+```{r}
+# Bar plot of incidents by borough
+ggplot(shooting_data, aes(x = BORO)) +
+  geom_bar() +
+  theme_minimal() +
+  labs(title = "Number of Shooting Incidents by Borough",
+       x = "Borough",
+       y = "Count of Incidents")
+```
+
+This visualization is interesting, I would like to explore why certain boroughs tend to have more reported shooting incidents rather than not. It is rather strange that Brooklyn and the Bronx have such a higher incident rate than Manhattan for me logically, seeing as how there is more traffic and tourism in Manhattan.
+
+## Visualization 2: Scatter Plot of Incidents Over Time
+```{r}
+# Convert OCCUR_TIME to hour categories for easier visualization
+shooting_data$HOUR <- format(as.POSIXct(shooting_data$OCCUR_TIME, format = "%H:%M:%S"), "%H")
+
+# Creating a facet wrap plot
+# Convert OCCUR_TIME to hour categories for easier visualization
+shooting_data$HOUR <- format(as.POSIXct(shooting_data$OCCUR_TIME, format = "%H:%M:%S"), "%H")
+
+# Creating a stacked bar graph
+ggplot(shooting_data, aes(x = HOUR, fill = VIC_SEX)) +
+  geom_bar(position = "stack") +
+  theme_minimal() +
+  labs(title = "Stacked Distribution of Shooting Incidents by Time of Day and Victim's Sex",
+       x = "Hour of Day",
+       y = "Count of Incidents")
+```
+
+What surprises me here the most is the similarities between the trend of the demographics, men and women or unlisted gender equally being targeted at certain times relative to another time. I am also curious as to the unreported genders of victims. It would be interesting to look further into seeing the report rates of which boroughs aren't reporting genders and see if there's any correlation there, or if there's an inverse correlation between the rates of victim gender reports compared to crime in certain Boroughs. Maybe I can break down the information more in the future there.
+
+# Project Step 4: In-Depth Analysis
+
+### Analysis of Unreported Genders
+
+We had two initial visualizations, but in my initial analysis of the data, I noticed the unreported genders of victims. I want to see if that has any discernible relationship with this and either burrows or time of day that the crime is reported.
+
+```{r}
+# Analysis of incidents with unreported or unknown victim genders
+unknown_gender_incidents <- subset(shooting_data, VIC_SEX == "Unknown")
+# Summary of these incidents
+summary(unknown_gender_incidents)
+
+borough_gender_reporting <- table(shooting_data$BORO, shooting_data$VIC_SEX == "Unknown")
+```
+
+### Let's first look at the relationship between gender identification and boroughs in New York, perhaps showing a correlation between the two could indicate a problem with one of the boroughs or departments.
+
+```{r}
+# Stacked bar plot for borough-wise gender reporting
+ggplot(shooting_data, aes(x = BORO, fill = VIC_SEX == "Unknown")) +
+  geom_bar(position = "fill") +
+  labs(title = "Proportion of Reported vs. Unreported Genders by Borough",
+       x = "Borough", y = "Proportion")
+
+# Heat map of unreported gender incidents across boroughs
+ggplot(melt(borough_gender_reporting), aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  labs(title = "Heatmap of Unreported Gender Incidents by Borough",
+       x = "Borough", y = "Gender Reported")
+```
+
+### When I look at this data, I don't really see much that I want to work with. I will assume for now that the borough plays a limited role on whether or not gender is reported. Lets turn to time of day:
+
+```{r}
+time_gender_correlation <- table(shooting_data$HOUR, shooting_data$VIC_SEX == "Unknown")
+
+# Line plot for time-of-day correlation with unreported genders
+ggplot(shooting_data, aes(x = HOUR, y = ..count.., color = VIC_SEX == "Unknown", group = VIC_SEX == "Unknown")) +
+  geom_line(stat = "count") +
+  labs(title = "Correlation between Time of Incident and Unreported Genders",
+       x = "Hour of Day", y = "Count of Incidents",
+       color = "Victim Sex") +
+  scale_color_manual(values = c("red", "blue"), labels = c("Known", "Unknown")) +
+  theme_minimal()
+```
+
+### Now this is a little more interesting, looks like there seems to be an increase of reports in the nighttime. Perhaps if I analyzed the data as percentages of the total reports for unknown and known, it'll show me something:
+
+```{r}
+shooting_data$HOUR <- as.numeric(format(as.POSIXct(shooting_data$OCCUR_TIME, format = "%H:%M:%S"), "%H"))
+
+shooting_data_summarized <- shooting_data %>%
+  mutate(VIC_SEX_UNKNOWN = ifelse(is.na(VIC_SEX) | VIC_SEX == "U", "Unknown", "Known")) %>%
+  group_by(HOUR, VIC_SEX_UNKNOWN) %>%
+  summarise(Count = n(), .groups = 'drop') %>%
+  group_by(HOUR) %>%
+  mutate(Total = sum(Count)) %>%
+  mutate(Percent = (Count / Total) * 100)
+
+# Plotting the summarized data
+ggplot(shooting_data_summarized, aes(x = HOUR, y = Percent, color = VIC_SEX_UNKNOWN, group = VIC_SEX_UNKNOWN)) +
+  geom_line() +
+  labs(
+    title = "Percentage of Shooting Incidents by Victim's Sex Status Over Time",
+    x = "Hour of Day",
+    y = "Percentage of Incidents",
+    color = "Victim Sex Status"
+  ) +
+  scale_color_manual(values = c("Known" = "red", "Unknown" = "blue")) +
+  theme_minimal()
+```
+
+### WOW! We are getting somewhere! With this model, we can clearly see those peak hours when sex is reported versus when it is not reported. Lets make a table to visualize that, and perhaps identify the times when there are the most versus least reports that show gender, and lets analyze those exact percentages as well:
+
+```{r}
+# Prepare the data for the formattable table
+wide_data <- shooting_data_summarized %>%
+  select(HOUR, VIC_SEX_UNKNOWN, Percent) %>%
+  spread(VIC_SEX_UNKNOWN, Percent) %>%
+  rename(Hour = HOUR, `Known` = Known, `Unknown` = Unknown)
+
+# Create a formattable table
+formattable_table <- formattable(wide_data, list(
+  `Known` = color_tile("white", "red"),
+  `Unknown` = color_tile("white", "blue")
+))
+
+# View the table
+formattable_table
+```
+```{r}
+# Finding the maximum and minimum for the 'Known' column
+max_known <- max(wide_data$Known, na.rm = TRUE)
+min_known <- min(wide_data$Known, na.rm = TRUE)
+
+# Finding the maximum and minimum for the 'Unknown' column
+max_unknown <- max(wide_data$Unknown, na.rm = TRUE)
+min_unknown <- min(wide_data$Unknown, na.rm = TRUE)
+
+# Finding the hour for the maximum and minimum for the 'Known' column
+hour_max_known <- wide_data$Hour[which.max(wide_data$Known)]
+hour_min_known <- wide_data$Hour[which.min(wide_data$Known)]
+
+# Finding the hour for the maximum and minimum for the 'Unknown' column
+hour_max_unknown <- wide_data$Hour[which.max(wide_data$Unknown)]
+hour_min_unknown <- wide_data$Hour[which.min(wide_data$Unknown)]
+
+# Preparing the messages
+message_max_known <- sprintf("When gender is reported, at %02d:00 Time of Day, %.2f%% of Shootings are reported, which is the most.", hour_max_known, max_known)
+message_min_known <- sprintf("When gender is reported, at %02d:00 Time of Day, %.2f%% of Shootings are reported, which is the least.", hour_min_known, min_known)
+message_max_unknown <- sprintf("When gender is not reported, at %02d:00 Time of Day, %.2f%% of Shootings are reported, which is the most.", hour_max_unknown, max_unknown)
+message_min_unknown <- sprintf("When gender is not reported, at %02d:00 Time of Day, %.2f%% of Shootings are reported, which is the least.", hour_min_unknown, min_unknown)
+
+# Printing the results
+cat(message_max_known, "\n")
+cat(message_min_known, "\n")
+cat(message_max_unknown, "\n")
+cat(message_min_unknown, "\n")
+```
+
+### Analysis of this:
+
+Now it's fairly obvious in hindsight that the percentages would sum up to 100 between maximum percentage when gender is reported and the minimum percentage when gender isn't reported, and vice versa. But, we can still take away two main points from this:
+
+1. Gender is most reported at around 9 AM in police reports of Shooting Incidents
+2. Gender is least reported at around Midnight in police reports of Shooting Incidents
+
+While we have this data here, I have a couple hypotheses that I draw from my work, which could warrant further investigation.
+
+- It can be observed from the graph labeled "Correlation between Time of Incident and Unreported Genders" that the least amount of shootings are reported at this time
+  - This makes it easy to claim anything from the fact that officers have more time to take down reports and are less rushed due to the decrease in overall reports that they have to follow
+  - The same can be said about the opposite, seeing how a majority of reports of shootings occur around midnight
+  - While both hold true, one could argue that there is still a 19.75% drop between the maximum and the minimums, how could this large of a drop be solely attributed to increased case load.
+- I provide a counter theory: 9AM is the time that officers come into work and that is likely when they are at their sharpest. Officers following a 9AM to 5PM schedule may see their productivity slide down after a while, and of course those working late are less likely to want to be out and spend extra time on reports due to tiredness or other factors
+  - Where this is supported, non-empirically, is the sharp spark up around 8 to 9 AM that then leads to a high peak that starts drifting down quickly around 5PM or 6PM (17 and 18) in the "Percentage of Shooting Incidents by Victim's Sex Status Over Time" graph.
+  - While this makes sense and can potentially explain the large drop, there isn't any way with this data that I could prove tiredness of cops.
+
+The way I see this project going further is not through these hypotheses, though. Rather than use the data to guess what can be done to reduce the trends of unreported genders, for whatever reason they may be, there could be a model designed using in depth work with data from each precinct. Since the data exists, it would be possible to use the averages of all the boroughs that I already laid out in my model and compare the hourly trends for each precinct. We can then make a massive chart with indicators of whether, for each given hour, they are over the average or under for that given hour in terms of reporting genders. If it is important to collect that data of the victims, it would be prudent to send individualized versions per precinct to each precinct and request that they themselves analyze the issue at hand and offer what they feel is necessary to improve the detail in these reports. Data Science doesn't prove everything, it merely should be a tool for us to find ways to work things out ourselves. There shouldn't be a quota set or even a goal, implicit or explicit, that precincts need to come up to the average. It should be used to then research and investigate separately what good precincts are doing at various hours that allow them to do the work they need to and get information from the precincts underneath to give details as to why exactly they feel like they are faltering, whether it is location or staffing or anything. This is the right way, in my humble opinion, to use this project and take it further.
+
+
+# Project Step 5: Add Bias Identification
+
+## My Conclusion
+
+I know that my work on this project is littered with biases. From the start, it is evident that I was poking at straws to see if any piece of data particularly stood out over something else. I definitely was seeking out correlation and found some semblance of it. My analysis at the end also is very biased. I am fully aware that I am unaware about the factors that go into a police officer's day and reports along with the potential future I saw with this project. I hope to reiterate that I am aware that these are biased statements with cherry-picked portions and averages of a complex, large data set. I make a lot of generalizations with this data and it should not be used as something definitive since there are a lot more factors that could play into this.
